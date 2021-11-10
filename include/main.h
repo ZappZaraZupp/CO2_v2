@@ -28,7 +28,7 @@ LEDA 8              -> 3.3V !!!!
 modify Adafruit_ST7735.cpp for AZ delivery 1,77" TFT
   if (options == INITR_GREENTAB) {
     displayInit(Rcmd2green);
-    _colstart = 1;
+    _colstart = 0;
     _rowstart = 0;
 */
 
@@ -93,8 +93,10 @@ Adafruit_BME280 baroSensor;
 int baroSensor_offset=+60;
 float oldpress=0;
 
-uint8_t measurementInterval = 10;
+uint8_t measurementInterval = 2;
+uint8_t storetime=10;
 float scd30TempOff = 3.0;
+long lastrun;
 
 // some states
 CircularBuffer<float, 3700> co2Buffer; // 2h buffer

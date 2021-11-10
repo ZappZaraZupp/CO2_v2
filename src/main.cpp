@@ -27,20 +27,25 @@ void doButtons() {
     }
   }
   // do it 
-  if(BtnOn[0] > debounceMillisLong) { 
+  if(BtnOn[0] > debounceMillisLong) {  // Kalibrate
     BtnOn[0] = 0;
     // recalibration: sensor to the outside = fresh air i.e. 400ppm
     airSensor.setForcedRecalibrationFactor(400);
     airSensor.setAmbientPressure(baroSensor.readPressure()/100 + baroSensor_offset); // pressure in mbar
+    tft.fillScreen(tftblack);
+    tft.setCursor(0, 22);
+    tft.setTextColor(tftwhite,tftblack);
+    tft.print("CO2 set to 400ppm");
+    delay(500);
     forcedisplay=1;
     #ifdef DEBUG
     snprintf(line,254,"Kalibration");
     Serial.println(line);
     #endif
 	}
-  else if(BtnOn[0] > debounceMillis) { 
+  else if(BtnOn[0] > debounceMillis) {  // X zoom -
       BtnOn[0] = 0;
-      zoom=zoom-1;
+      zoom=zoom/2;
       if (zoom<1) zoom=1;
       forcedisplay=1;
       #ifdef DEBUG
@@ -48,23 +53,38 @@ void doButtons() {
       Serial.println(line);
       #endif
   }
-  if(BtnOn[1] > debounceMillisLong) { 
+  if(BtnOn[1] > debounceMillisLong) {  // switch display
       if(displtype==1) {displtype=0;} else {displtype=1;}
       forcedisplay=1;
       BtnOn[1] = 0;
 	}
-  else if(BtnOn[1] > debounceMillis) { 
+  else if(BtnOn[1] > debounceMillis) {  // Xzoom +
       BtnOn[1] = 0;
-      zoom=zoom+1;
-      if (zoom>30) zoom=30;
+      zoom=zoom*2;
+      if (zoom>32) zoom=32;
       forcedisplay=1;
       #ifdef DEBUG
       snprintf(line,254,"zoom set to %d",zoom);
       Serial.println(line);
       #endif
   }
-  if(BtnOn[2] > debounceMillisLong) { 
+  if(BtnOn[2] > debounceMillisLong) {  // clear buffers
       BtnOn[2] = 0;
+      co2Buffer.clear();
+      tempBuffer.clear();
+      humiBuffer.clear();
+      pressBuffer.clear();
+      tft.fillScreen(tftblack);
+      tft.setCursor(0, 22);
+      tft.setTextColor(tftwhite,tftblack);
+      tft.print("Buffers cleared");
+      delay(500);
+      forcedisplay=1;
+      #ifdef DEBUG
+      snprintf(line,254,"Clear Buffers");
+      Serial.println(line);
+      #endif
+
 	}
   else if(BtnOn[2] > debounceMillis) { 
       BtnOn[2] = 0;
@@ -91,61 +111,98 @@ void doButtons() {
   }
 }
 
-void doLEDs() {
-    if(co2Buffer.last() < 800) {
-      NeoStrip.ClearTo(RgbColor(0,maxColVal,0));
-    }
-    else if (co2Buffer.last() < 1000) {
-      NeoStrip.ClearTo(RgbColor(maxColVal/2,maxColVal/2,0));
-    }
-    else {
-      NeoStrip.ClearTo(RgbColor(maxColVal,0,0));
-    }
-    NeoStrip.Show();
+void doLEDs(struct grphcolor gc[], int gcnum) {
+  if(co2Buffer.last() <= gc[0].to) {
+    NeoStrip.ClearTo(RgbColor(0,maxColVal,0));
+  }
+  else if(co2Buffer.last() > gc[gcnum-1].from) {
+    NeoStrip.ClearTo(RgbColor(maxColVal,0,0));
+  }
+  else {
+    NeoStrip.ClearTo(RgbColor(maxColVal/2,maxColVal/2,0));
+  }
+  NeoStrip.Show();
 }
 
-void doDisplay(uint8_t offset, CircularBuffer<float, 3700> &dataBuffer, const char * mytext, int zoom, float vmin, float vmax, struct grphcolor gc[], int gcnum) {
+void doDisplay(int offset, CircularBuffer<float, 3700> &dataBuffer, const char * mytext, int xZoom, float yZoomMax, const char* ytext,struct grphcolor gc[], int gcnum) {
   /*
-  boxwidth=127 / 1px line / 1px space / 123px graph / 1px space / 1px line
+  boxwidth=127 / 1px line / 1px space / 123 graph / 1px space / 1px line
   boxheight=32 / 1px line / 1px space / 7px font / 1px space / 20px graph / 1px space/ 1px line
   */
 
   offset = offset * 32;
   char line[255];
-  float gval;
-  int pval,pcfrom,pcto;
-  
-  tft.drawRect(0,offset+0,127,33,tftwhite);
+  float gval[123];
+  float pval;
+  float gvalMax,gvalMin;
+  int i,j,c;
+  int graphXsize;
+  word textcol=tftwhite;
 
-  gval = dataBuffer.last();
-  if(gval < vmin ) gval=vmin; // cut 
-  if(gval > vmax ) gval=vmax;
-  for(int c=0; c<gcnum; c++) {
-    if(gval >= gc[c].from && gval < gc[c].to) {
-      tft.setTextColor(gc[c].color,tftblack);
-      break; 
-    }
+  // get min/max values for display and copy to reduced array for display according to zoom
+  gvalMax=-99999;
+  gvalMin=+99999;
+  graphXsize=100;
+
+  for(i=dataBuffer.size(), j=0; i>0 && j<graphXsize; i-=xZoom, j+=1) {
+    gval[j]=dataBuffer[i];
+    if(gval[j]>gvalMax) gvalMax=gval[j]; // maximum displayed rating
+    if(gval[j]<gvalMin) gvalMin=gval[j]; // maximum displayed rating
+    #ifdef DEBUG
+    //snprintf(line,254,"dataBuffer[%d] %f, gval[%d] %f, vmin %f, vmax %f, gvalMin %f, gvalMax %f",i,dataBuffer[i],j,gval[j],vmin,vmax,gvalMin,gvalMax);
+    //Serial.println(line);
+    #endif
   }
-  tft.setCursor(2, offset+2);
-  tft.printf(mytext,dataBuffer.last());
-  
-  for(int i=dataBuffer.size(), j=0;i>=0 && j<123; i-=zoom, j+=1) {
-    gval = dataBuffer[i];
-    if(gval < vmin ) gval=vmin; // cut 
-    if(gval > vmax ) gval=vmax;
-    pval = (gval-vmin)/(vmax-vmin)*20; //20px height for graph
-    tft.drawLine(2+j,offset+30,2+j,offset+10,tftblack); //clear current line
-    for(int c=0; c<gcnum; c++) {
-      pcfrom=(gc[c].from-vmin)/(vmax-vmin)*20;
-      pcto=(gc[c].to-vmin)/(vmax-vmin)*20;
-      if(gval >= gc[c].from && gval < gc[c].to) {
-        tft.drawLine(2+j,offset+30-pcfrom,2+j,offset+30-pval,gc[c].color);
+  if(gvalMax-gvalMin < yZoomMax) { 
+    gvalMax = gvalMin + yZoomMax;
+  } // set minimal y range
+  graphXsize=j;
+
+  // Box
+  // get text color depending on last measurement
+  if(gval[0] <= gc[0].to) {
+    textcol=gc[0].color;
+  }
+  else if(gval[0] > gc[gcnum-1].from) {
+    textcol=gc[gcnum-1].color;
+  }
+  else {
+    for(c=1; c<gcnum-1; c++) {
+      if(gval[0] >= gc[c].from && gval[0] < gc[c].to) {
+        textcol=gc[c].color;
         break; 
       }
-      else {
-        tft.drawLine(2+j,offset+30-pcfrom,2+j,offset+30-pcto,gc[c].color);
+    }
+  }
+
+  tft.drawRect(0,offset+0,128,33,tftwhite);
+  tft.setTextColor(textcol,tftblack);
+  tft.setCursor(2, offset+2);
+  tft.printf(mytext,dataBuffer.last()); // print the read value
+  tft.setTextColor(tftwhite,tftblack);
+  tft.setCursor(127-(strlen(ytext)-1)*6,offset+10);
+  tft.printf(ytext,gvalMax);
+  tft.setCursor(127-(strlen(ytext)-1)*6,offset+24);
+  tft.printf(ytext,gvalMin);
+
+  for(j=0; j<graphXsize; j+=1) {
+    pval = (gval[j]-gvalMin)/(gvalMax-gvalMin)*20; //20px height for graph
+    tft.drawLine(2+j,offset+30,2+j,offset+10,tftblack); //clear current line
+    if(gval[j] <= gc[0].to) {
+      textcol=gc[0].color;
+    }
+    else if(gval[j] > gc[gcnum-1].from) {
+      textcol=gc[gcnum-1].color;
+    }
+    else {
+      for(c=1; c<gcnum-1; c++) {
+        if(gval[j] >= gc[c].from && gval[j] < gc[c].to) {
+          textcol=gc[c].color;
+          break; 
+        }
       }
     }
+    tft.drawLine(2+j,offset+30,2+j,offset+30-pval,textcol); 
   }
 }
 
@@ -217,17 +274,17 @@ void setup() {
   }
   forcedisplay=1;
 
-  c_co2[0].from = 200;
+  c_co2[0].from = 0;
   c_co2[0].to = 700;
   c_co2[0].color = tftgreen;
   c_co2[1].from = 700;
   c_co2[1].to = 900;
   c_co2[1].color = tftyellow;
   c_co2[2].from = 900;
-  c_co2[2].to = 1001;
-  c_co2[2].color = tftred;
+  c_co2[2].to = 0;
+  c_co2[2].color = tftorange;
 
-  c_temp[0].from = -5;
+  c_temp[0].from = 0;
   c_temp[0].to = 10;
   c_temp[0].color = tftlightblue;
   c_temp[1].from = 10;
@@ -237,21 +294,21 @@ void setup() {
   c_temp[2].to = 24;
   c_temp[2].color = tftgreen;
   c_temp[3].from = 24;
-  c_temp[3].to = 36;
+  c_temp[3].to = 0;
   c_temp[3].color = tftyellow;
 
-  c_humi[0].from = 20;
+  c_humi[0].from = 0;
   c_humi[0].to = 40;
   c_humi[0].color = tftorange;
   c_humi[1].from = 40;
   c_humi[1].to = 61;
   c_humi[1].color = tftgreen;
   c_humi[2].from = 61;
-  c_humi[2].to = 81;
+  c_humi[2].to = 0;
   c_humi[2].color = tftorange;
   
-  c_press[0].from = 800;
-  c_press[0].to = 1201;
+  c_press[0].from = 0;
+  c_press[0].to = 0;
   c_press[0].color = tftwhite;
 }
 
@@ -268,11 +325,13 @@ void loop() {
   // Buttons
   doButtons();
 
-  if (airSensor.dataAvailable() || forcedisplay==1){ 
+  if ((airSensor.dataAvailable() && (millis()-lastrun > storetime*1000)) || forcedisplay == 1){ 
     if(forcedisplay == 1) {
       forcedisplay = 0;
       tft.fillScreen(tftblack);
     }
+    lastrun=millis();
+
     co2  = airSensor.getCO2();
     temp = airSensor.getTemperature()-airSensor.getTemperatureOffset();
     //temp = airSensor.getTemperature();
@@ -292,18 +351,18 @@ void loop() {
     pressBuffer.push(press);
 
     // LEDS
-    doLEDs();
+    doLEDs(c_co2, 3);
 
     // Display
     if(displtype == 0) {
-      doDisplay(0, co2Buffer, "CO2: %4.0fppm", zoom, 200, 1000, c_co2, 3);
-      doDisplay(1, tempBuffer, "Temperatur: %2.1fC", zoom, -5, 35, c_temp, 4);
-      doDisplay(2, humiBuffer, "Rel. Feuchte: %2.1f%%", zoom, 20, 80, c_humi, 3);
-      doDisplay(3, pressBuffer, "Druck: %4.0fmbar", zoom, 800, 1200, c_press, 1);
+      doDisplay(0, co2Buffer, "CO2: %4.0fppm", zoom, 10, "%4.0f", c_co2, 3);
+      doDisplay(1, tempBuffer, "Temperatur: %2.1fC", zoom, 2, "%2.1f", c_temp, 4);
+      doDisplay(2, humiBuffer, "Rel. Feuchte: %2.1f%%", zoom, 2, "%2.1f", c_humi, 3);
+      doDisplay(3, pressBuffer, "Druck: %4.0fmbar", zoom, 10, "%4.0f", c_press, 1);
 
       tft.setCursor(0, 131);
       tft.setTextColor(tftwhite,tftblack);
-      disptime=123.0*measurementInterval*zoom/60.0;
+      disptime=100.0*storetime*zoom/60.0;
       tft.printf(" 0 --------> %3.0f Min \n              (Z=%d)",disptime,zoom);
     }
     else {

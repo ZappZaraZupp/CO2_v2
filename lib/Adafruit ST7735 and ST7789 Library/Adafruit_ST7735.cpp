@@ -220,7 +220,7 @@ void Adafruit_ST7735::initR(uint8_t options) {
   commonInit(Rcmd1);
   if (options == INITR_GREENTAB) {
     displayInit(Rcmd2green);
-    _colstart = 1;
+    _colstart = 0;
     _rowstart = 0;
   } else if ((options == INITR_144GREENTAB) || (options == INITR_HALLOWING)) {
     _height = ST7735_TFTHEIGHT_128;
