@@ -34,10 +34,21 @@ modify Adafruit_ST7735.cpp for AZ delivery 1,77" TFT
 
 Adafruit_ST7735 tft = Adafruit_ST7735(15, 26, 13, 14, 25);
 
-// TFT colors
+// TFT colors (on my tft r and b are switched)
+// rgb565 bbbbbggggggrrrrr
 word ConvertRGB( byte R, byte G, byte B)
 {
   return ( ((B & 0xF8) << 8) | ((G & 0xFC) << 3) | (R >> 3) );
+}
+word dimRGB565(word c565,int intens) { //intens 0..100
+  int r,g,b;
+  b=byte((c565 & 0xF800) >> 11);
+  g=byte((c565 & 0x7E0) >> 5);
+  r=byte(c565 & 0x1F);
+  b=b*intens/100;
+  g=g*intens/100;
+  r=r*intens/100;
+  return (b<<11) | (g<<5) | r;
 }
 
 word tftgreen = ConvertRGB(0,255,0);
@@ -47,6 +58,9 @@ word tftred = ConvertRGB(255,0,0);
 word tftblue = ConvertRGB(0,0,255);
 word tftlightblue = ConvertRGB(128,128,255);
 word tftwhite = ConvertRGB(255,255,255);
+word tftlightgray = ConvertRGB(192,192,192);
+word tftgray = ConvertRGB(128,128,128);
+word tftdarkgray = ConvertRGB(80,80,80);
 word tftblack = ConvertRGB(0,0,0);
 
 struct grphcolor {
@@ -66,7 +80,7 @@ int displtype=0;
 const uint8_t NeoPin = 33;
 const uint8_t NeoNum = 8; // 8 pixel ring
 NeoPixelBus <NeoGrbFeature, Neo800KbpsMethod> NeoStrip(NeoNum, NeoPin);
-int maxColVal = 20;
+int maxColVal = 32;
 RgbColor black(0);
 
 // buttons
@@ -93,10 +107,13 @@ Adafruit_BME280 baroSensor;
 int baroSensor_offset=+60;
 float oldpress=0;
 
-uint8_t measurementInterval = 2;
-uint8_t storetime=10;
+uint8_t measurementInterval = 2; // mesureinterval SDC30 in seconds
+uint8_t storetime=18; //store value in buffer every xx seconds
+uint8_t presstoretime=5; //pressure every storetime * x
+
 float scd30TempOff = 3.0;
 long lastrun;
+long laststore_press;
 
 // some states
 CircularBuffer<float, 3700> co2Buffer; // 2h buffer
