@@ -8,6 +8,13 @@
 #include <Adafruit_BME280.h>
 #include <CircularBuffer.h>
 
+#include <WiFi.h>
+#include "WIFI_pwd.h"
+#include <MQTT.h>
+
+MQTTClient mqclient;
+WiFiClient wiclient;
+
 // TFT
 /*
 GND 1               -> GND

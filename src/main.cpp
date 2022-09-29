@@ -240,6 +240,46 @@ void doDisplay(int offset, CircularBuffer<float, 3700> &dataBuffer, const char *
   }
 }
 
+int connectWifi () {
+  int i=0;
+  if(!WiFi.isConnected()) {
+    Serial.println("Connect Wifi");
+    WiFi.begin(ssid, password);
+    while (!WiFi.isConnected()) {
+		  Serial.print(".");
+      delay(500);
+      if(i++ > 20) {
+        Serial.print("Connect Wifi failed");
+        return 1;
+      }
+	  }
+  }
+  Serial.println("Wifi connected");
+  return 0;
+}
+
+int connectMQTT () {
+  int i=0;
+  if(WiFi.isConnected()) {
+    Serial.println("Connect MQTT");
+    mqclient.begin(mqsrv,wiclient);
+    while (!mqclient.connect("CO2",mquser,mqpass)) {
+      Serial.print(".");
+      delay(500);
+      if(i++ > 20) {
+        Serial.print("Connect MQTT failed");
+        return 1;
+      }
+    }
+    Serial.println("MQTT connected");
+    return 0;
+  }
+  else {
+    Serial.println("MQTT: Wifi not connected.");
+    return 1;
+  }
+}
+
 void setup() {
   
   // Serial (for debugging)
@@ -261,13 +301,35 @@ void setup() {
   tft.setTextSize(1);
   tft.setRotation(2);
   tft.fillScreen(tftblack);
-  tft.setCursor(14, 22);
+  tft.setCursor(0, 0);
   tft.setTextColor(tftwhite,tftblack);
-  tft.print("CO2 Ampel");
+  tft.print("CO2 Ampel\n");
 
   NeoStrip.Begin(); // LEDs
   NeoStrip.ClearTo(black);
   NeoStrip.Show();
+
+  // WIFI
+  tft.print("Connecting to WIFI\n");
+  if(connectWifi() == 0) {
+    tft.print("  connected\n");
+  }
+  else {
+    Serial.println("Wifi connect failed. MQTT disabled");
+    tft.setCursor(0, 22);
+    tft.print("Wifi not\nconnected\n\nMQTT disabled");
+  }
+  
+  // MQTT
+  tft.print("Connecting to MQTT\n");
+  if(connectMQTT() == 0) {
+    tft.print("  connected\n");
+  }
+  else {
+    Serial.println("MQTT connect failed. MQTT disabled");
+    tft.setCursor(0, 22);
+    tft.print("MQTT not\nconnected\n\nMQTT disabled");
+  }
 
   if (airSensor.begin() == false)
   {
@@ -380,15 +442,25 @@ void loop() {
       oldpress=press;
     }
 
-    if(millis()-lastrun >= storetime*1000) { 
+    if(millis()-lastrun >= storetime*1000) {  // store vaules every storetime seconds on ESP
       co2Buffer.push(co2);
       tempBuffer.push(temp);
       humiBuffer.push(humi);
       lastrun=millis();
-
       refresh=1;
+
+      if(connectWifi() == 0 ) { // send to mqtt is connected
+        if(connectMQTT() == 0) {
+          mqclient.publish("CO2/SCD/co2",String(co2),true,0);
+          mqclient.publish("CO2/SCD/temperature",String(temp),true,0);
+          mqclient.publish("CO2/SCD/humidity",String(humi),true,0);
+          mqclient.publish("CO2/BME/pressure",String(press),true,0);
+          mqclient.publish("CO2/BME/humidity",String(humiBME),true,0);
+          mqclient.publish("CO2/BME/temperature",String(tempBME),true,0);  
+        }
+      }
     }
-    if(millis()-laststore_press >= storetime*1000*presstoretime) { // store pressure only 10*storetime secs
+    if(millis()-laststore_press >= storetime*1000*presstoretime) { // store pressure only 10*storetime secs on ESP
       pressBuffer.push(press);
       laststore_press=millis();
       refresh=1;
